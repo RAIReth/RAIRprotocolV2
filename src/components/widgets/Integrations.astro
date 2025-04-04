@@ -2,6 +2,7 @@
 import WidgetWrapper from "~/components/ui/WidgetWrapper.astro";
 import Headline from "~/components/ui/Headline.astro";
 import { Icon } from "astro-icon/components";
+import Button from "~/components/ui/Button.astro";
 
 interface IntegrationSection {
   title: string;
@@ -35,6 +36,8 @@ const {
   classes?: Record<string, any>;
   bg?: any;
 };
+
+const DEFAULT_VISIBLE_ITEMS = 3;
 ---
 
 <WidgetWrapper
@@ -67,15 +70,43 @@ const {
     </div>
   </div>
 
+  <div class="flex justify-end mb-4">
+    <Button
+      id="expandAllButton"
+      variant="secondary"
+      class="flex items-center gap-2"
+    >
+      <span>Expand All</span>
+      <Icon name="fa6-solid:chevron-down" class="w-4 h-4 transition-transform" />
+    </Button>
+  </div>
+
   <div class="space-y-12" id="integrationSections">
-    {sections.map((section) => (
-      <div class="bg-white dark:bg-slate-900 rounded-lg shadow-lg p-6">
-        <h3 class="text-2xl font-bold mb-4">{section.title}</h3>
+    {sections.map((section, sectionIndex) => (
+      <div class="bg-white dark:bg-slate-900 rounded-lg shadow-lg p-6 section-container" data-section-index={sectionIndex}>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-2xl font-bold">{section.title}</h3>
+          <button
+            class="section-toggle flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
+            aria-expanded="false"
+            data-section-index={sectionIndex}
+          >
+            <span class="text-sm">Show More</span>
+            <Icon name="fa6-solid:chevron-down" class="w-4 h-4 transition-transform" />
+          </button>
+        </div>
         <p class="text-muted mb-6">{section.description}</p>
         
-        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {section.items.map((item) => (
-            <div class="integration-item bg-gray-50 dark:bg-slate-800 rounded-lg p-4" data-title={item.title.toLowerCase()} data-type={item.type.toLowerCase()}>
+        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-container">
+          {section.items.map((item, itemIndex) => (
+            <div 
+              class="integration-item bg-gray-50 dark:bg-slate-800 rounded-lg p-4 transition-opacity duration-200"
+              data-title={item.title.toLowerCase()}
+              data-type={item.type.toLowerCase()}
+              data-section-index={sectionIndex}
+              data-item-index={itemIndex}
+              style={`display: ${itemIndex < DEFAULT_VISIBLE_ITEMS ? 'block' : 'none'}`}
+            >
               <div class="flex items-center mb-3">
                 <Icon name={item.icon} class="w-8 h-8 text-primary mr-3" />
                 <h4 class="text-lg font-semibold">{item.title}</h4>
@@ -98,6 +129,16 @@ const {
             </div>
           ))}
         </div>
+        {section.items.length > DEFAULT_VISIBLE_ITEMS && (
+          <div class="text-center mt-4">
+            <button
+              class="show-more-button text-primary hover:text-primary-dark transition-colors text-sm font-medium"
+              data-section-index={sectionIndex}
+            >
+              Show {section.items.length - DEFAULT_VISIBLE_ITEMS} More
+            </button>
+          </div>
+        )}
       </div>
     ))}
   </div>
@@ -106,8 +147,50 @@ const {
 <script>
   const searchInput = document.getElementById('integrationSearch') as HTMLInputElement;
   const clearButton = document.getElementById('clearSearch') as HTMLButtonElement;
+  const expandAllButton = document.getElementById('expandAllButton') as HTMLButtonElement;
   const integrationItems = document.querySelectorAll('.integration-item');
   const sections = document.querySelectorAll('#integrationSections > div');
+  const sectionToggles = document.querySelectorAll('.section-toggle');
+  const showMoreButtons = document.querySelectorAll('.show-more-button');
+  
+  let isAllExpanded = false;
+  const expandedSections = new Set<number>();
+
+  function toggleSection(sectionIndex: number, forceExpand?: boolean) {
+    const section = document.querySelector(`[data-section-index="${sectionIndex}"]`) as HTMLElement;
+    const toggle = section.querySelector('.section-toggle') as HTMLElement;
+    const items = section.querySelectorAll('.integration-item');
+    const showMoreButton = section.querySelector('.show-more-button') as HTMLElement;
+    
+    const shouldExpand = forceExpand !== undefined ? forceExpand : !expandedSections.has(sectionIndex);
+    
+    if (shouldExpand) {
+      expandedSections.add(sectionIndex);
+      items.forEach(item => {
+        (item as HTMLElement).style.display = 'block';
+      });
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.querySelector('span')!.textContent = 'Show Less';
+      toggle.querySelector('i')!.classList.add('rotate-180');
+      if (showMoreButton) showMoreButton.style.display = 'none';
+    } else {
+      expandedSections.delete(sectionIndex);
+      items.forEach((item, index) => {
+        (item as HTMLElement).style.display = index < 3 ? 'block' : 'none';
+      });
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.querySelector('span')!.textContent = 'Show More';
+      toggle.querySelector('i')!.classList.remove('rotate-180');
+      if (showMoreButton) showMoreButton.style.display = 'block';
+    }
+  }
+
+  function toggleAllSections(forceExpand?: boolean) {
+    isAllExpanded = forceExpand !== undefined ? forceExpand : !isAllExpanded;
+    sections.forEach((_, index) => toggleSection(index, isAllExpanded));
+    expandAllButton.querySelector('span')!.textContent = isAllExpanded ? 'Collapse All' : 'Expand All';
+    expandAllButton.querySelector('i')!.classList.toggle('rotate-180', isAllExpanded);
+  }
 
   function filterItems(searchTerm: string) {
     const term = searchTerm.toLowerCase();
@@ -116,22 +199,28 @@ const {
     integrationItems.forEach((item) => {
       const title = item.getAttribute('data-title') || '';
       const type = item.getAttribute('data-type') || '';
+      const sectionIndex = parseInt(item.getAttribute('data-section-index') || '0');
       
       if (title.includes(term) || type.includes(term)) {
         item.classList.remove('hidden');
         hasVisibleItems = true;
+        // Auto-expand sections with matches
+        if (term) expandedSections.add(sectionIndex);
       } else {
         item.classList.add('hidden');
       }
     });
 
-    // Hide empty sections
-    sections.forEach((section) => {
+    // Update section visibility and expansion state
+    sections.forEach((section, index) => {
       const visibleItems = section.querySelectorAll('.integration-item:not(.hidden)');
       if (visibleItems.length === 0) {
         section.classList.add('hidden');
       } else {
         section.classList.remove('hidden');
+        if (term) {
+          toggleSection(index, true);
+        }
       }
     });
 
@@ -139,6 +228,7 @@ const {
     clearButton.classList.toggle('hidden', !searchTerm);
   }
 
+  // Event Listeners
   searchInput.addEventListener('input', (e) => {
     const target = e.target as HTMLInputElement;
     filterItems(target.value);
@@ -147,5 +237,52 @@ const {
   clearButton.addEventListener('click', () => {
     searchInput.value = '';
     filterItems('');
+    // Reset expansion state
+    expandedSections.clear();
+    sections.forEach((_, index) => toggleSection(index, false));
   });
-</script> 
+
+  expandAllButton.addEventListener('click', () => {
+    toggleAllSections();
+  });
+
+  sectionToggles.forEach((toggle) => {
+    toggle.addEventListener('click', () => {
+      const sectionIndex = parseInt(toggle.getAttribute('data-section-index') || '0');
+      toggleSection(sectionIndex);
+    });
+  });
+
+  showMoreButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const sectionIndex = parseInt(button.getAttribute('data-section-index') || '0');
+      toggleSection(sectionIndex, true);
+    });
+  });
+</script>
+
+<style>
+  .section-container {
+    transition: all 0.3s ease-in-out;
+  }
+
+  .items-container {
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  .integration-item {
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  }
+
+  .integration-item.hidden {
+    display: none;
+  }
+
+  .section-toggle i {
+    transition: transform 0.3s ease-in-out;
+  }
+
+  #expandAllButton i {
+    transition: transform 0.3s ease-in-out;
+  }
+</style> 
