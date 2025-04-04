@@ -24,6 +24,12 @@ interface GlobeInstance {
   // Add methods for accessing internal objects
   renderer?: () => any;
   camera?: () => any;
+  // Add methods for HTML elements
+  htmlElementsData?: (data: any[]) => GlobeInstance;
+  htmlElement?: (elementFn: (d: any) => HTMLElement) => GlobeInstance;
+  htmlTransitionDuration?: (duration: number) => GlobeInstance;
+  onHtmlElementClick?: (callback: (d: any) => void) => GlobeInstance;
+  onHtmlElementHover?: (callback: (d: any | null) => void) => GlobeInstance;
 }
 
 interface Country {
@@ -31,6 +37,7 @@ interface Country {
   name: string;
   gdp: number;
   previousGdp: number;
+  gdpChange: number;
   population: number;
   coordinates: {
     lat: number;
@@ -50,6 +57,8 @@ interface GlobalParameters {
   baseTariffRate: number;
   gdpGrowthRate: number;
   tradeMultiplier: number;
+  laborProductivity: number;
+  taxRate: number;
 }
 
 interface TariffGlobeProps {
@@ -64,7 +73,7 @@ export default function TariffGlobe({
   width = 800, 
   height = 600,
   countries = [],
-  globalParameters = { baseTariffRate: 5, gdpGrowthRate: 2, tradeMultiplier: 1 },
+  globalParameters = { baseTariffRate: 5, gdpGrowthRate: 2, tradeMultiplier: 1, laborProductivity: 1, taxRate: 15 },
   isRunning = false
 }: TariffGlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -96,22 +105,11 @@ export default function TariffGlobe({
           .width(width)
           .height(height)
           .backgroundColor('rgba(0,0,0,0)')
-          .pointsTransitionDuration(1000)
-          .arcsTransitionDuration(1000);
+          .arcsTransitionDuration(1000)
+          .htmlTransitionDuration(1000); // Transition for HTML elements
 
         globeRef.current = globe;
         setError(null);
-        
-        // Set up event listeners after globe is initialized
-        try {
-          const renderer = (globe as any).renderer();
-          if (renderer && renderer.domElement) {
-            renderer.domElement.addEventListener('click', handleGlobeClick);
-            renderer.domElement.addEventListener('mousemove', handleGlobeMouseMove);
-          }
-        } catch (err) {
-          console.error('Error setting up event listeners:', err);
-        }
       })
       .catch(err => {
         console.error('Failed to load globe.gl:', err);
@@ -131,14 +129,16 @@ export default function TariffGlobe({
     if (!globeRef.current || !countries.length) return;
 
     try {
-      // Prepare points data for countries
-      const pointsData = countries.map(country => ({
+      // Max absolute GDP change for scaling bar height (adjust scaling as needed)
+      const maxAbsGdpChange = Math.max(...countries.map(c => Math.abs(c.gdpChange)), 1); // Avoid division by zero
+
+      // Prepare HTML elements data for countries (GDP change bars)
+      const htmlElementsData = countries.map(country => ({
         lat: country.coordinates.lat,
         lng: country.coordinates.lng,
-        size: Math.log10(country.gdp) / 2, // Scale point size based on GDP
+        countryData: country, // Pass full country data
+        gdpChange: country.gdpChange,
         name: country.name,
-        gdp: country.gdp,
-        previousGdp: country.previousGdp,
         id: country.id
       }));
 
@@ -160,100 +160,95 @@ export default function TariffGlobe({
       );
 
       // Update globe with new data
-      globeRef.current
-        .pointsData(pointsData)
-        .pointColor(() => '#ff4444')
-        .pointRadius(d => (d as any).size)
-        .pointAltitude(0.1)
-        .pointsMerge(false)
+      // Cast to any to use dynamically added/extended methods
+      (globeRef.current as any)
         .arcsData(arcsData)
         .arcColor(d => (d as any).color)
         .arcAltitude(0.2)
-        .arcStroke(d => (d as any).width);
+        .arcStroke(d => (d as any).width)
+        // --- HTML Elements for GDP Bars --- 
+        .htmlElementsData(htmlElementsData)
+        .htmlElement(d => {
+          const country = (d as any).countryData as Country;
+          const elementData = d as any; // Capture data for listeners
+          const el = document.createElement('div');
+          el.className = 'gdp-bar-container';
+
+          // Create Country Name Label
+          const nameLabel = document.createElement('div');
+          nameLabel.className = 'country-map-label name-label';
+          nameLabel.textContent = country.name;
+          el.appendChild(nameLabel);
+
+          // Create GDP Value Label
+          const gdpLabel = document.createElement('div');
+          gdpLabel.className = 'country-map-label gdp-label';
+          gdpLabel.textContent = `$${(country.gdp / 1000).toFixed(1)}T`; // Format GDP
+          el.appendChild(gdpLabel);
+
+          // Create GDP Change Bar
+          const barContainer = document.createElement('div'); // Container to hold the bar itself
+          barContainer.className = 'bar-visual-container';
+          const bar = document.createElement('div');
+          bar.className = 'gdp-bar';
+          // Scale height based on GDP change magnitude (adjust scaling factor as needed)
+          const barHeight = Math.min(50, Math.max(2, (Math.abs(country.gdpChange) / maxAbsGdpChange) * 50)); // Max 50px height, min 2px
+          bar.style.height = `${barHeight}px`;
+          bar.style.backgroundColor = country.gdpChange >= 0 ? '#4caf50' : '#f44336'; // Green for positive, Red for negative
+          barContainer.appendChild(bar);
+          el.appendChild(barContainer);
+          
+          // --- Add Event Listeners Directly --- 
+          el.addEventListener('click', () => {
+            handleElementClick(elementData); 
+          });
+          el.addEventListener('mouseover', () => {
+            handleElementHover(elementData);
+          });
+          el.addEventListener('mouseout', () => {
+            handleElementHover(null); // Clear hover on mouse out
+          });
+
+          return el;
+        });
     } catch (err) {
       console.error('Error updating globe data:', err);
       setError('Error updating globe visualization.');
     }
   }, [countries, globalParameters, isRunning]);
 
-  // Define the click handler function
-  const handleGlobeClick = (event: MouseEvent) => {
+  // Define the click handler function for HTML elements
+  const handleElementClick = (elementData: any) => {
     if (!globeRef.current) return;
     
     try {
-      // Get the mouse position relative to the renderer
-      const renderer = (globeRef.current as any).renderer();
-      if (!renderer || !renderer.domElement) return;
-      
-      const rect = renderer.domElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      
-      // Use the camera to get the ray
-      const camera = (globeRef.current as any).camera();
-      if (!camera) return;
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-      
-      // Get the points data
-      const pointsData = (globeRef.current as any).pointsData();
-      if (!pointsData || !pointsData.length) return;
-      
-      // Find the closest point
-      const intersects = raycaster.intersectObjects(pointsData);
-      if (intersects.length > 0) {
-        const point = intersects[0].object.userData;
-        if (point && point.id) {
-          const country = countries.find(c => c.id === point.id);
-          if (country) {
-            setSelectedCountry(country);
-          }
+      if (elementData && elementData.id) {
+        const country = countries.find(c => c.id === elementData.id);
+        if (country) {
+          setSelectedCountry(country);
+        } else {
+          setSelectedCountry(null);
         }
       } else {
         setSelectedCountry(null);
       }
     } catch (err) {
       console.error('Error handling globe click:', err);
+      setSelectedCountry(null);
     }
   };
 
-  // Handle mouse move for hover effects
-  const handleGlobeMouseMove = (event: MouseEvent) => {
+  // Handle mouse move for hover effects on HTML elements
+  const handleElementHover = (elementData: any | null) => {
     if (!globeRef.current) return;
     
     try {
-      // Get the mouse position relative to the renderer
-      const renderer = (globeRef.current as any).renderer();
-      if (!renderer || !renderer.domElement) return;
-      
-      const rect = renderer.domElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      
-      // Use the camera to get the ray
-      const camera = (globeRef.current as any).camera();
-      if (!camera) return;
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-      
-      // Get the points data
-      const pointsData = (globeRef.current as any).pointsData();
-      if (!pointsData || !pointsData.length) {
-        setHoveredCountry(null);
-        return;
-      }
-      
-      // Find the closest point
-      const intersects = raycaster.intersectObjects(pointsData);
-      if (intersects.length > 0) {
-        const point = intersects[0].object.userData;
-        if (point && point.id) {
-          const country = countries.find(c => c.id === point.id);
-          if (country) {
-            setHoveredCountry(country);
-          }
+      if (elementData && elementData.id) {
+        const country = countries.find(c => c.id === elementData.id);
+        if (country) {
+          setHoveredCountry(country);
+        } else {
+          setHoveredCountry(null);
         }
       } else {
         setHoveredCountry(null);
@@ -263,23 +258,6 @@ export default function TariffGlobe({
       setHoveredCountry(null);
     }
   };
-
-  // Clean up event listeners when component unmounts
-  useEffect(() => {
-    return () => {
-      if (globeRef.current) {
-        try {
-          const renderer = (globeRef.current as any).renderer();
-          if (renderer && renderer.domElement) {
-            renderer.domElement.removeEventListener('click', handleGlobeClick);
-            renderer.domElement.removeEventListener('mousemove', handleGlobeMouseMove);
-          }
-        } catch (err) {
-          console.error('Error cleaning up event listeners:', err);
-        }
-      }
-    };
-  }, []);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -357,6 +335,46 @@ export default function TariffGlobe({
       
       <style>
         {`
+          /* Styling for the GDP bars */
+          .gdp-bar-container {
+            pointer-events: auto; /* Allow clicks/hovers on the container */
+            cursor: pointer;
+            display: flex;
+            flex-direction: column; /* Stack labels and bar vertically */
+            align-items: center; /* Center items horizontally */
+            justify-content: center;
+            padding: 2px;
+          }
+          
+          .country-map-label {
+            font-size: 8px; /* Smaller font size for map labels */
+            color: white;
+            text-shadow: 1px 1px 2px black; /* Improve visibility */
+            text-align: center;
+            white-space: nowrap; /* Prevent wrapping */
+            pointer-events: none; /* Labels shouldn't block interaction */
+            margin-bottom: 1px;
+          }
+          
+          .name-label {
+            font-weight: bold;
+          }
+          
+          .bar-visual-container { 
+            /* Container to manage bar alignment if needed */
+            display: flex;
+            align-items: flex-end; /* Align bar to bottom */
+            height: 50px; /* Fixed height for the bar area */
+            width: 6px; /* Width of the bar visual */
+          }
+          
+          .gdp-bar {
+            width: 100%;
+            background-color: grey; /* Default/fallback color */
+            transition: height 0.5s ease-out, background-color 0.5s ease-out;
+            border-radius: 1px;
+          }
+
           .country-label {
             background: rgba(0, 0, 0, 0.7);
             color: white;

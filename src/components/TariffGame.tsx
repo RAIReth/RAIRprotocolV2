@@ -10,6 +10,7 @@ interface Country {
   name: string;
   gdp: number;
   previousGdp: number; // Track previous GDP for comparison
+  gdpChange: number; // Store the change in GDP for visualization
   population: number;
   coordinates: {
     lat: number;
@@ -36,6 +37,8 @@ interface GlobalParameters {
   baseTariffRate: number;
   gdpGrowthRate: number;
   tradeMultiplier: number;
+  laborProductivity: number; // New parameter
+  taxRate: number; // New parameter
 }
 
 export default function TariffGame() {
@@ -45,7 +48,9 @@ export default function TariffGame() {
   const [globalParameters, setGlobalParameters] = useState<GlobalParameters>({
     baseTariffRate: 5,
     gdpGrowthRate: 2,
-    tradeMultiplier: 1
+    tradeMultiplier: 1,
+    laborProductivity: 1, // Initial value
+    taxRate: 15 // Initial value
   });
   const [countries, setCountries] = useState<Country[]>([
     {
@@ -53,6 +58,7 @@ export default function TariffGame() {
       name: 'United States',
       gdp: 21000,
       previousGdp: 21000,
+      gdpChange: 0,
       population: 331,
       coordinates: { lat: 37.0902, lng: -95.7129 },
       tradePartners: [
@@ -67,6 +73,7 @@ export default function TariffGame() {
       name: 'China',
       gdp: 14700,
       previousGdp: 14700,
+      gdpChange: 0,
       population: 1402,
       coordinates: { lat: 35.8617, lng: 104.1954 },
       tradePartners: [
@@ -81,6 +88,7 @@ export default function TariffGame() {
       name: 'Mexico',
       gdp: 1200,
       previousGdp: 1200,
+      gdpChange: 0,
       population: 128,
       coordinates: { lat: 23.6345, lng: -102.5528 },
       tradePartners: [
@@ -94,6 +102,7 @@ export default function TariffGame() {
       name: 'Japan',
       gdp: 4230,
       previousGdp: 4230,
+      gdpChange: 0,
       population: 125,
       coordinates: { lat: 36.2048, lng: 138.2529 },
       tradePartners: [
@@ -108,6 +117,7 @@ export default function TariffGame() {
       name: 'Germany',
       gdp: 4220,
       previousGdp: 4220,
+      gdpChange: 0,
       population: 83,
       coordinates: { lat: 51.1657, lng: 10.4515 },
       tradePartners: [
@@ -122,6 +132,7 @@ export default function TariffGame() {
       name: 'United Kingdom',
       gdp: 3180,
       previousGdp: 3180,
+      gdpChange: 0,
       population: 67,
       coordinates: { lat: 55.3781, lng: -3.4360 },
       tradePartners: [
@@ -136,6 +147,7 @@ export default function TariffGame() {
       name: 'France',
       gdp: 2930,
       previousGdp: 2930,
+      gdpChange: 0,
       population: 67,
       coordinates: { lat: 46.2276, lng: 2.2137 },
       tradePartners: [
@@ -150,6 +162,7 @@ export default function TariffGame() {
       name: 'Italy',
       gdp: 2010,
       previousGdp: 2010,
+      gdpChange: 0,
       population: 60,
       coordinates: { lat: 41.8719, lng: 12.5674 },
       tradePartners: [
@@ -164,6 +177,7 @@ export default function TariffGame() {
       name: 'Brazil',
       gdp: 1830,
       previousGdp: 1830,
+      gdpChange: 0,
       population: 212,
       coordinates: { lat: -14.2350, lng: -51.9253 },
       tradePartners: [
@@ -178,6 +192,7 @@ export default function TariffGame() {
       name: 'Canada',
       gdp: 2000,
       previousGdp: 2000,
+      gdpChange: 0,
       population: 38,
       coordinates: { lat: 56.1304, lng: -106.3468 },
       tradePartners: [
@@ -192,6 +207,7 @@ export default function TariffGame() {
       name: 'South Korea',
       gdp: 1630,
       previousGdp: 1630,
+      gdpChange: 0,
       population: 51,
       coordinates: { lat: 35.9078, lng: 127.7669 },
       tradePartners: [
@@ -206,6 +222,7 @@ export default function TariffGame() {
       name: 'India',
       gdp: 3170,
       previousGdp: 3170,
+      gdpChange: 0,
       population: 1380,
       coordinates: { lat: 20.5937, lng: 78.9629 },
       tradePartners: [
@@ -220,6 +237,7 @@ export default function TariffGame() {
       name: 'Russia',
       gdp: 1770,
       previousGdp: 1770,
+      gdpChange: 0,
       population: 144,
       coordinates: { lat: 61.5240, lng: 105.3188 },
       tradePartners: [
@@ -234,6 +252,7 @@ export default function TariffGame() {
       name: 'Australia',
       gdp: 1540,
       previousGdp: 1540,
+      gdpChange: 0,
       population: 25,
       coordinates: { lat: -25.2744, lng: 133.7751 },
       tradePartners: [
@@ -246,7 +265,7 @@ export default function TariffGame() {
   ]);
 
   // Handle parameter changes
-  const handleParameterChange = (parameter: string, value: number) => {
+  const handleParameterChange = (parameter: keyof GlobalParameters, value: number) => {
     setGlobalParameters(prev => ({
       ...prev,
       [parameter]: value
@@ -259,30 +278,57 @@ export default function TariffGame() {
 
     const interval = setInterval(() => {
       setCurrentTime(prev => prev + 1);
-      
-      // Update countries based on parameters
+
+      // Update countries based on parameters and trade
       setCountries(prevCountries => {
         return prevCountries.map(country => {
           // Store current GDP as previous for next comparison
           const previousGdp = country.gdp;
+
+          // 1. Calculate Trade Balance Effect
+          let totalExports = 0;
+          let totalImports = 0;
+          country.tradePartners.forEach(partner => {
+            totalExports += partner.exportVolume;
+            totalImports += partner.importVolume;
+          });
+          const tradeBalance = totalExports - totalImports;
+          // Simple scaling for trade balance effect - adjust as needed
+          const tradeBalanceEffect = tradeBalance * globalParameters.tradeMultiplier * 0.005; 
+
+          // 2. Calculate Base GDP Growth (Intrinsic)
+          const baseGrowthRate = globalParameters.gdpGrowthRate / 100;
+          const baseGrowth = country.gdp * baseGrowthRate;
+          // Add some randomness, less impactful than before
+          const randomFactor = (Math.random() - 0.5) * 0.05; 
+          const intrinsicGrowth = baseGrowth * (1 + randomFactor);
+
+          // 3. Calculate Productivity Effect (adds to growth rate)
+          const productivityEffect = country.gdp * (globalParameters.laborProductivity / 1000); // Simple bonus based on productivity
+
+          // 4. Calculate Tax Effect (reduces final GDP pool slightly)
+          const taxDrag = country.gdp * (globalParameters.taxRate / 2000); // Simple reduction based on tax rate
+
+          // 5. Calculate New GDP
+          let newGdp = previousGdp + intrinsicGrowth + tradeBalanceEffect + productivityEffect - taxDrag;
           
-          // Simple GDP growth simulation with some randomness
-          const baseGrowth = country.gdp * (globalParameters.gdpGrowthRate / 100);
-          const randomFactor = (Math.random() - 0.5) * 0.5; // Random factor between -0.25 and 0.25
-          const gdpGrowth = baseGrowth * (1 + randomFactor);
-          const newGdp = country.gdp + gdpGrowth;
+          // Ensure GDP doesn't fall below a minimum threshold (e.g., 1 billion)
+          newGdp = Math.max(1, newGdp); 
           
+          const gdpChange = newGdp - previousGdp;
+
           return {
             ...country,
             gdp: newGdp,
-            previousGdp: previousGdp
+            previousGdp: previousGdp,
+            gdpChange: gdpChange // Store the change
           };
         });
       });
     }, 1000 / speed);
 
     return () => clearInterval(interval);
-  }, [isRunning, speed, globalParameters.gdpGrowthRate]);
+  }, [isRunning, speed, globalParameters]); // Include all globalParameters in dependency array
 
   return (
     <div className="tariff-game">
