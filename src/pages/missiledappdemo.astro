@@ -1,0 +1,26 @@
+---
+import LandingLayout from '~/layouts/LandingLayout.astro';
+import MissileCommand from '~/components/widgets/MissileGame.astro';
+
+const metadata = {
+  title: 'Missile Command Dapp Demo - RAIRprotocol',
+  ignoreTitleTemplate: true,
+};
+---
+
+<LandingLayout metadata={metadata}>
+  <div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+      <a href="/" class="text-primary hover:text-primary-dark flex items-center gap-2">
+        <i class="fa-solid fa-arrow-left"></i>
+        Back to Home
+      </a>
+    </div>
+    
+    <MissileCommand
+      title="Missile Command Dapp Demo"
+      subtitle="Experience our interactive missile defense simulation"
+      tagline="Interactive Demo"
+    />
+  </div>
+</LandingLayout> 

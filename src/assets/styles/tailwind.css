@@ -36,6 +36,12 @@
   .btn-tertiary {
     @apply btn border-none shadow-none text-muted hover:text-gray-900 dark:text-gray-400 dark:hover:text-white;
   }
+
+  .game-canvas {
+    @apply w-full aspect-video rounded-lg shadow-lg bg-gray-100 dark:bg-gray-800;
+    min-height: 300px;
+    max-height: 600px;
+  }
 }
 
 [astro-icon].icon-light > * {

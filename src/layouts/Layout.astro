@@ -12,6 +12,7 @@ import SiteVerification from '~/components/common/SiteVerification.astro';
 import Analytics from '~/components/common/Analytics.astro';
 import BasicScripts from '~/components/common/BasicScripts.astro';
 import InteractiveBackground from '~/components/ui/InteractiveBackground.astro';
+import ChatWidget from '~/components/widgets/ChatWidget.astro';
 
 // Uncomment line below to activate View Transitions
 // import { ViewTransitions } from 'astro:transitions';
@@ -44,6 +45,7 @@ const { language, textDirection } = I18N;
   <body class="antialiased text-default bg-page tracking-tight">
     <InteractiveBackground />
     <slot />
+    <ChatWidget />
 
     <BasicScripts />
 

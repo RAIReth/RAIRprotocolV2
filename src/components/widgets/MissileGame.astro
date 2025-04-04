@@ -1,0 +1,554 @@
+---
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+import Headline from '~/components/ui/Headline.astro';
+import Button from '~/components/ui/Button.astro';
+
+const {
+  title = await Astro.slots.render('title'),
+  subtitle = await Astro.slots.render('subtitle'),
+  tagline = await Astro.slots.render('tagline'),
+  id,
+  isDark = false,
+  classes = {},
+  bg = await Astro.slots.render('bg'),
+} = Astro.props;
+---
+
+<WidgetWrapper id={id} isDark={isDark} containerClass={`max-w-6xl mx-auto ${classes?.container ?? ''}`} bg={bg}>
+  <Headline title={title} subtitle={subtitle} tagline={tagline} />
+  <div class="flex flex-col items-center justify-center p-4">
+    <div class="relative w-full max-w-2xl">
+      <canvas id="missileCommandCanvas" class="game-canvas"></canvas>
+      <div class="absolute top-4 left-1/2 transform -translate-x-1/2 flex gap-8 text-2xl font-bold text-gray-800 dark:text-white">
+        <span>Score: <span id="score">0</span></span>
+        <span>Time: <span id="time">30</span>s</span>
+      </div>
+    </div>
+    <div class="mt-4 flex gap-4">
+      <Button id="runButton" variant="primary">
+        <i class="fa-solid fa-play mr-2"></i>Run
+      </Button>
+      <Button id="pauseButton" variant="secondary" disabled>
+        <i class="fa-solid fa-pause mr-2"></i>Pause
+      </Button>
+      <Button id="resetButton" variant="secondary">
+        <i class="fa-solid fa-rotate mr-2"></i>Reset
+      </Button>
+    </div>
+    
+    <!-- Statistics Panel -->
+    <div class="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+      <div>Missiles Shot: <span id="missilesShot">0</span></div>
+      <div>Cities Remaining: <span id="citiesRemaining">6</span></div>
+      <div>Accuracy: <span id="accuracy">0%</span></div>
+      <div>Difficulty: <span id="difficulty">Medium</span></div>
+    </div>
+
+    <!-- Parameters Panel -->
+    <div class="mt-6 w-full max-w-2xl space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Simulation Speed: <span id="simulationSpeedValue">5</span>
+            <input type="range" id="simulationSpeed" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Missile Speed: <span id="missileSpeedValue">5</span>
+            <input type="range" id="missileSpeed" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Missile Strength: <span id="missileStrengthValue">5</span>
+            <input type="range" id="missileStrength" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Spawn Rate: <span id="spawnRateValue">5</span>
+            <input type="range" id="spawnRate" min="1" max="10" value="5" class="w-full">
+          </label>
+        </div>
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Turret Accuracy: <span id="turretAccuracyValue">5</span>
+            <input type="range" id="turretAccuracy" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Fire Rate: <span id="fireRateValue">5</span>
+            <input type="range" id="fireRate" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Turret Damage: <span id="turretDamageValue">5</span>
+            <input type="range" id="turretDamage" min="1" max="10" value="5" class="w-full">
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Number of Turrets: <span id="turretCountValue">3</span>
+            <input type="range" id="turretCount" min="1" max="5" value="3" class="w-full">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</WidgetWrapper>
+
+<script>
+  interface Point {
+    x: number;
+    y: number;
+  }
+
+  interface Missile {
+    x: number;
+    y: number;
+    speed: number;
+    strength: number;
+    type: 'basic' | 'fast' | 'heavy';
+    trail: Point[];
+    targetCity: number;
+  }
+
+  interface Turret {
+    x: number;
+    y: number;
+    angle: number;
+    accuracy: number;
+    fireRate: number;
+    damage: number;
+    cooldown: number;
+    lastShot: number;
+  }
+
+  interface City {
+    x: number;
+    y: number;
+    health: number;
+    maxHealth: number;
+    width: number;
+    height: number;
+  }
+
+  class MissileCommandSimulation {
+    private canvas: HTMLCanvasElement;
+    private ctx: CanvasRenderingContext2D;
+    private runButton: HTMLButtonElement;
+    private pauseButton: HTMLButtonElement;
+    private resetButton: HTMLButtonElement;
+    private scoreElement: HTMLElement;
+    private timeElement: HTMLElement;
+    
+    // Statistics elements
+    private missilesShotElement: HTMLElement;
+    private citiesRemainingElement: HTMLElement;
+    private accuracyElement: HTMLElement;
+    private difficultyElement: HTMLElement;
+    
+    // Parameter elements
+    private missileSpeedInput: HTMLInputElement;
+    private missileStrengthInput: HTMLInputElement;
+    private spawnRateInput: HTMLInputElement;
+    private turretAccuracyInput: HTMLInputElement;
+    private fireRateInput: HTMLInputElement;
+    private turretDamageInput: HTMLInputElement;
+    private turretCountInput: HTMLInputElement;
+    private simulationSpeedInput: HTMLInputElement;
+    
+    // Game state
+    private gameLoop: number | null = null;
+    private isPaused = false;
+    private isSimulationRunning = false;
+    private startTime = 0;
+    private gameTime = 30;
+    private score = 0;
+    private missilesShot = 0;
+    private totalShots = 0;
+    
+    // Game objects
+    private missiles: Missile[] = [];
+    private turrets: Turret[] = [];
+    private cities: City[] = [];
+    private explosions: Array<Point> = [];
+    
+    constructor() {
+      this.canvas = document.getElementById('missileCommandCanvas') as HTMLCanvasElement;
+      this.ctx = this.canvas.getContext('2d')!;
+      this.runButton = document.getElementById('runButton') as HTMLButtonElement;
+      this.pauseButton = document.getElementById('pauseButton') as HTMLButtonElement;
+      this.resetButton = document.getElementById('resetButton') as HTMLButtonElement;
+      this.scoreElement = document.getElementById('score')!;
+      this.timeElement = document.getElementById('time')!;
+      
+      // Initialize statistics elements
+      this.missilesShotElement = document.getElementById('missilesShot')!;
+      this.citiesRemainingElement = document.getElementById('citiesRemaining')!;
+      this.accuracyElement = document.getElementById('accuracy')!;
+      this.difficultyElement = document.getElementById('difficulty')!;
+      
+      // Initialize parameter elements
+      this.missileSpeedInput = document.getElementById('missileSpeed') as HTMLInputElement;
+      this.missileStrengthInput = document.getElementById('missileStrength') as HTMLInputElement;
+      this.spawnRateInput = document.getElementById('spawnRate') as HTMLInputElement;
+      this.turretAccuracyInput = document.getElementById('turretAccuracy') as HTMLInputElement;
+      this.fireRateInput = document.getElementById('fireRate') as HTMLInputElement;
+      this.turretDamageInput = document.getElementById('turretDamage') as HTMLInputElement;
+      this.turretCountInput = document.getElementById('turretCount') as HTMLInputElement;
+      this.simulationSpeedInput = document.getElementById('simulationSpeed') as HTMLInputElement;
+      
+      this.setupCanvas();
+      this.setupEventListeners();
+      this.setupParameterListeners();
+      this.initializeGame();
+    }
+    
+    private setupCanvas() {
+      const resizeCanvas = () => {
+        const container = this.canvas.parentElement!;
+        const width = container.clientWidth;
+        this.canvas.width = width;
+        this.canvas.height = width * (9/16);
+        
+        this.initializeGame();
+      };
+      
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+    }
+    
+    private setupEventListeners() {
+      this.runButton.addEventListener('click', () => this.startSimulation());
+      this.pauseButton.addEventListener('click', () => this.togglePause());
+      this.resetButton.addEventListener('click', () => this.resetSimulation());
+    }
+    
+    private setupParameterListeners() {
+      const updateValue = (input: HTMLInputElement, valueElement: HTMLElement) => {
+        valueElement.textContent = input.value;
+      };
+      
+      this.missileSpeedInput.addEventListener('input', () => 
+        updateValue(this.missileSpeedInput, document.getElementById('missileSpeedValue')!));
+      this.missileStrengthInput.addEventListener('input', () => 
+        updateValue(this.missileStrengthInput, document.getElementById('missileStrengthValue')!));
+      this.spawnRateInput.addEventListener('input', () => 
+        updateValue(this.spawnRateInput, document.getElementById('spawnRateValue')!));
+      this.turretAccuracyInput.addEventListener('input', () => 
+        updateValue(this.turretAccuracyInput, document.getElementById('turretAccuracyValue')!));
+      this.fireRateInput.addEventListener('input', () => 
+        updateValue(this.fireRateInput, document.getElementById('fireRateValue')!));
+      this.turretDamageInput.addEventListener('input', () => 
+        updateValue(this.turretDamageInput, document.getElementById('turretDamageValue')!));
+      this.turretCountInput.addEventListener('input', () => 
+        updateValue(this.turretCountInput, document.getElementById('turretCountValue')!));
+      this.simulationSpeedInput.addEventListener('input', () => 
+        updateValue(this.simulationSpeedInput, document.getElementById('simulationSpeedValue')!));
+    }
+    
+    private initializeGame() {
+      // Initialize cities
+      const cityWidth = this.canvas.width / 8;
+      const cityHeight = this.canvas.height / 8;
+      const citySpacing = this.canvas.width / 7;
+      
+      this.cities = Array.from({ length: 6 }, (_, i) => ({
+        x: citySpacing * (i + 1),
+        y: this.canvas.height - cityHeight - 10,
+        health: 100,
+        maxHealth: 100,
+        width: cityWidth,
+        height: cityHeight
+      }));
+      
+      // Initialize turrets
+      const turretSpacing = this.canvas.width / (this.turretCountInput.valueAsNumber + 1);
+      this.turrets = Array.from({ length: this.turretCountInput.valueAsNumber }, (_, i) => ({
+        x: turretSpacing * (i + 1),
+        y: this.canvas.height - 50,
+        angle: 0,
+        accuracy: this.turretAccuracyInput.valueAsNumber / 10,
+        fireRate: this.fireRateInput.valueAsNumber / 5,
+        damage: this.turretDamageInput.valueAsNumber * 10,
+        cooldown: 0,
+        lastShot: 0
+      }));
+      
+      this.resetSimulation();
+    }
+    
+    private resetSimulation() {
+      this.missiles = [];
+      this.explosions = [];
+      this.score = 0;
+      this.missilesShot = 0;
+      this.totalShots = 0;
+      this.gameTime = 30;
+      this.startTime = 0;
+      
+      this.cities.forEach(city => city.health = city.maxHealth);
+      
+      this.updateScore();
+      this.updateStatistics();
+      
+      if (this.isSimulationRunning) {
+        this.draw();
+      }
+    }
+    
+    private startSimulation() {
+      if (this.isSimulationRunning) return;
+      
+      this.isSimulationRunning = true;
+      this.isPaused = false;
+      this.startTime = Date.now();
+      
+      this.runButton.disabled = true;
+      this.pauseButton.disabled = false;
+      this.resetButton.disabled = true;
+      
+      this.gameLoop = window.requestAnimationFrame(() => this.update());
+    }
+    
+    private togglePause() {
+      if (!this.isSimulationRunning) return;
+      
+      this.isPaused = !this.isPaused;
+      this.pauseButton.innerHTML = this.isPaused ? 
+        '<i class="fa-solid fa-play mr-2"></i>Resume' : 
+        '<i class="fa-solid fa-pause mr-2"></i>Pause';
+    }
+    
+    private spawnMissile() {
+      const speed = this.missileSpeedInput.valueAsNumber / 5;
+      const strength = this.missileStrengthInput.valueAsNumber * 10;
+      const spawnRate = this.spawnRateInput.valueAsNumber / 5;
+      
+      if (Math.random() < spawnRate / 60) {
+        const targetCity = Math.floor(Math.random() * this.cities.length);
+        const missile: Missile = {
+          x: Math.random() * this.canvas.width,
+          y: 0,
+          speed,
+          strength,
+          type: Math.random() < 0.7 ? 'basic' : Math.random() < 0.85 ? 'fast' : 'heavy',
+          trail: [],
+          targetCity
+        };
+        this.missiles.push(missile);
+      }
+    }
+    
+    private updateMissiles() {
+      this.missiles.forEach(missile => {
+        // Update position
+        const targetCity = this.cities[missile.targetCity];
+        const dx = targetCity.x - missile.x;
+        const dy = targetCity.y - missile.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        missile.x += (dx / distance) * missile.speed;
+        missile.y += (dy / distance) * missile.speed;
+        
+        // Update trail
+        missile.trail.push({ x: missile.x, y: missile.y });
+        if (missile.trail.length > 20) {
+          missile.trail.shift();
+        }
+        
+        // Check for city collision
+        if (this.checkCollision(missile, targetCity)) {
+          targetCity.health -= missile.strength;
+          this.missiles = this.missiles.filter(m => m !== missile);
+          this.createExplosion(missile.x, missile.y);
+        }
+      });
+    }
+    
+    private updateTurrets() {
+      this.turrets.forEach(turret => {
+        // Find closest missile
+        let closestMissile: Missile | null = null;
+        let closestDistance = Infinity;
+        
+        for (const missile of this.missiles) {
+          const dx = missile.x - turret.x;
+          const dy = missile.y - turret.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestMissile = missile;
+          }
+        }
+        
+        if (closestMissile) {
+          // Update turret angle
+          const dx = closestMissile.x - turret.x;
+          const dy = closestMissile.y - turret.y;
+          turret.angle = Math.atan2(dy, dx);
+          
+          // Fire if ready
+          const now = Date.now();
+          if (now - turret.lastShot > 1000 / turret.fireRate) {
+            if (Math.random() < turret.accuracy) {
+              this.missiles = this.missiles.filter(m => m !== closestMissile);
+              this.missilesShot++;
+              this.score += 100;
+              this.createExplosion(closestMissile.x, closestMissile.y);
+            }
+            turret.lastShot = now;
+            this.totalShots++;
+          }
+        }
+      });
+    }
+    
+    private checkCollision(missile: Missile, city: City): boolean {
+      return missile.x > city.x && 
+             missile.x < city.x + city.width &&
+             missile.y > city.y && 
+             missile.y < city.y + city.height;
+    }
+    
+    private createExplosion(x: number, y: number) {
+      for (let i = 0; i < 10; i++) {
+        this.explosions.push({
+          x: x + (Math.random() - 0.5) * 20,
+          y: y + (Math.random() - 0.5) * 20
+        });
+      }
+    }
+    
+    private updateExplosions() {
+      this.explosions = this.explosions.filter(explosion => {
+        explosion.y += 1;
+        return explosion.y < this.canvas.height;
+      });
+    }
+    
+    private update() {
+      if (!this.isSimulationRunning || this.isPaused) return;
+      
+      // Update game time
+      const elapsed = (Date.now() - this.startTime) / 1000;
+      this.gameTime = Math.max(0, 30 - elapsed);
+      
+      // Spawn new missiles
+      this.spawnMissile();
+      
+      // Update game objects
+      this.updateMissiles();
+      this.updateTurrets();
+      this.updateExplosions();
+      
+      // Update UI
+      this.updateScore();
+      this.updateStatistics();
+      
+      // Check for game over
+      if (this.gameTime <= 0 || this.cities.every(city => city.health <= 0)) {
+        this.simulationOver();
+        return;
+      }
+      
+      this.draw();
+      this.gameLoop = window.requestAnimationFrame(() => this.update());
+    }
+    
+    private updateScore() {
+      this.scoreElement.textContent = this.score.toString();
+      this.timeElement.textContent = Math.ceil(this.gameTime).toString();
+    }
+    
+    private updateStatistics() {
+      this.missilesShotElement.textContent = this.missilesShot.toString();
+      this.citiesRemainingElement.textContent = this.cities.filter(city => city.health > 0).length.toString();
+      this.accuracyElement.textContent = `${Math.round((this.missilesShot / this.totalShots) * 100) || 0}%`;
+      
+      const difficulty = this.missileSpeedInput.valueAsNumber > 7 ? 'Hard' :
+                        this.missileSpeedInput.valueAsNumber > 4 ? 'Medium' : 'Easy';
+      this.difficultyElement.textContent = difficulty;
+    }
+    
+    private simulationOver() {
+      this.isSimulationRunning = false;
+      this.runButton.disabled = false;
+      this.pauseButton.disabled = true;
+      this.resetButton.disabled = false;
+      this.pauseButton.innerHTML = '<i class="fa-solid fa-pause mr-2"></i>Pause';
+      
+      if (this.gameLoop) {
+        window.cancelAnimationFrame(this.gameLoop);
+        this.gameLoop = null;
+      }
+      
+      const result = this.cities.every(city => city.health <= 0) ? 'Game Over!' : 'Victory!';
+      alert(`${result}\nFinal Score: ${this.score}`);
+    }
+    
+    private draw() {
+      // Clear canvas
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      
+      // Draw cities
+      this.cities.forEach(city => {
+        // Draw building
+        this.ctx.fillStyle = '#4B5563';
+        this.ctx.fillRect(city.x, city.y, city.width, city.height);
+        
+        // Draw health bar
+        const healthWidth = (city.health / city.maxHealth) * city.width;
+        this.ctx.fillStyle = city.health > 50 ? '#10B981' : city.health > 25 ? '#F59E0B' : '#EF4444';
+        this.ctx.fillRect(city.x, city.y - 10, healthWidth, 5);
+      });
+      
+      // Draw turrets
+      this.turrets.forEach(turret => {
+        // Draw base
+        this.ctx.fillStyle = '#3B82F6';
+        this.ctx.beginPath();
+        this.ctx.arc(turret.x, turret.y, 10, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Draw barrel
+        this.ctx.beginPath();
+        this.ctx.moveTo(turret.x, turret.y);
+        this.ctx.lineTo(
+          turret.x + Math.cos(turret.angle) * 20,
+          turret.y + Math.sin(turret.angle) * 20
+        );
+        this.ctx.strokeStyle = '#3B82F6';
+        this.ctx.lineWidth = 3;
+        this.ctx.stroke();
+      });
+      
+      // Draw missiles
+      this.missiles.forEach(missile => {
+        // Draw trail
+        this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
+        this.ctx.beginPath();
+        missile.trail.forEach((point, index) => {
+          if (index === 0) {
+            this.ctx.moveTo(point.x, point.y);
+          } else {
+            this.ctx.lineTo(point.x, point.y);
+          }
+        });
+        this.ctx.stroke();
+        
+        // Draw missile
+        this.ctx.fillStyle = '#EF4444';
+        this.ctx.beginPath();
+        this.ctx.arc(missile.x, missile.y, 3, 0, Math.PI * 2);
+        this.ctx.fill();
+      });
+      
+      // Draw explosions
+      this.explosions.forEach(explosion => {
+        this.ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+      });
+    }
+  }
+  
+  // Initialize simulation when the DOM is loaded
+  document.addEventListener('DOMContentLoaded', () => {
+    new MissileCommandSimulation();
+  });
+</script> 
