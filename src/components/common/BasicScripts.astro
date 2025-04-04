@@ -44,8 +44,8 @@ import { UI } from '~/utils/config';
       matches.forEach((elem) => {
         elem.addEventListener(event, (e) => fn(e, elem), false);
       });
-    } else {
-      console.warn('No elements found for selector:', selector);
+    } else if (window.debug) {
+      console.log('No elements found for selector:', selector);
     }
   }
 
@@ -60,8 +60,8 @@ import { UI } from '~/utils/config';
       if (window.debug) console.log('Header found');
       header.style.display = 'block';
       header.style.visibility = 'visible';
-    } else {
-      console.warn('Header element not found');
+    } else if (window.debug) {
+      console.log('Header element not found - this is expected on some pages');
     }
 
     // Initialize navigation
@@ -70,8 +70,8 @@ import { UI } from '~/utils/config';
       if (window.debug) console.log('Navigation found');
       nav.style.display = 'block';
       nav.style.visibility = 'visible';
-    } else {
-      console.warn('Navigation element not found');
+    } else if (window.debug) {
+      console.log('Navigation element not found - this is expected on some pages');
     }
 
     // Initialize theme toggle
@@ -82,75 +82,82 @@ import { UI } from '~/utils/config';
         toggle.style.display = 'block';
         toggle.style.visibility = 'visible';
       });
-    } else {
-      console.warn('No theme toggles found');
+    } else if (window.debug) {
+      console.log('No theme toggles found - this is expected on some pages');
     }
 
-    attachEvent('#header nav', 'click', function () {
-      document.querySelector('[data-aw-toggle-menu]')?.classList.remove('expanded');
-      document.body.classList.remove('overflow-hidden');
-      document.getElementById('mobile-menu-container')?.classList.remove('expanded');
-    });
+    // Only attach events if the elements exist
+    if (header && nav) {
+      attachEvent('#header nav', 'click', function () {
+        document.querySelector('[data-aw-toggle-menu]')?.classList.remove('expanded');
+        document.body.classList.remove('overflow-hidden');
+        document.getElementById('mobile-menu-container')?.classList.remove('expanded');
+      });
+    }
 
-    attachEvent('[data-aw-toggle-menu]', 'click', function (_, elem) {
-      elem.classList.toggle('expanded');
-      document.body.classList.toggle('overflow-hidden');
-      document.getElementById('mobile-menu-container')?.classList.toggle('expanded');
-    });
+    const menuToggle = document.querySelector('[data-aw-toggle-menu]');
+    if (menuToggle) {
+      attachEvent('[data-aw-toggle-menu]', 'click', function (_, elem) {
+        elem.classList.toggle('expanded');
+        document.body.classList.toggle('overflow-hidden');
+        document.getElementById('mobile-menu-container')?.classList.toggle('expanded');
+      });
+    }
 
-    attachEvent('#mobile-menu-overlay', 'click', function () {
-      document.querySelector('[data-aw-toggle-menu]')?.classList.remove('expanded');
-      document.body.classList.remove('overflow-hidden');
-      document.getElementById('mobile-menu-container')?.classList.remove('expanded');
-    });
+    const menuOverlay = document.getElementById('mobile-menu-overlay');
+    if (menuOverlay) {
+      attachEvent('#mobile-menu-overlay', 'click', function () {
+        document.querySelector('[data-aw-toggle-menu]')?.classList.remove('expanded');
+        document.body.classList.remove('overflow-hidden');
+        document.getElementById('mobile-menu-container')?.classList.remove('expanded');
+      });
+    }
 
-    attachEvent('[data-aw-toggle-color-scheme]', 'click', function () {
-      if (defaultTheme.endsWith(':only')) {
-        return;
-      }
-      document.documentElement.classList.toggle('dark');
-      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    });
-
-    attachEvent('[data-aw-social-share]', 'click', function (_, elem) {
-      const network = elem.getAttribute('data-aw-social-share');
-      const url = encodeURIComponent(elem.getAttribute('data-aw-url'));
-      const text = encodeURIComponent(elem.getAttribute('data-aw-text'));
-
-      let href;
-      switch (network) {
-        case 'facebook':
-          href = `https://www.facebook.com/sharer.php?u=${url}`;
-          break;
-        case 'twitter':
-          href = `https://twitter.com/intent/tweet?url=${url}&text=${text}`;
-          break;
-        case 'linkedin':
-          href = `https://www.linkedin.com/shareArticle?mini=true&url=${url}&title=${text}`;
-          break;
-        case 'whatsapp':
-          href = `https://wa.me/?text=${text}%20${url}`;
-          break;
-        case 'mail':
-          href = `mailto:?subject=%22${text}%22&body=${text}%20${url}`;
-          break;
-
-        default:
+    const themeToggle = document.querySelector('[data-aw-toggle-color-scheme]');
+    if (themeToggle) {
+      attachEvent('[data-aw-toggle-color-scheme]', 'click', function () {
+        if (defaultTheme.endsWith(':only')) {
           return;
-      }
+        }
+        document.documentElement.classList.toggle('dark');
+        localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      });
+    }
 
-      const newlink = document.createElement('a');
-      newlink.target = '_blank';
-      newlink.href = href;
-      newlink.click();
-    });
+    const socialShare = document.querySelector('[data-aw-social-share]');
+    if (socialShare) {
+      attachEvent('[data-aw-social-share]', 'click', function (_, elem) {
+        const network = elem.getAttribute('data-aw-social-share');
+        const url = encodeURIComponent(elem.getAttribute('data-aw-url'));
+        const text = encodeURIComponent(elem.getAttribute('data-aw-text'));
 
-    let screenSize = window.matchMedia('(max-width: 767px)');
-    screenSize.addEventListener('change', function () {
-      document.querySelector('[data-aw-toggle-menu]')?.classList.remove('expanded');
-      document.body.classList.remove('overflow-hidden');
-      document.getElementById('mobile-menu-container')?.classList.remove('expanded');
-    });
+        let href;
+        switch (network) {
+          case 'facebook':
+            href = `https://www.facebook.com/sharer.php?u=${url}`;
+            break;
+          case 'twitter':
+            href = `https://twitter.com/intent/tweet?url=${url}&text=${text}`;
+            break;
+          case 'linkedin':
+            href = `https://www.linkedin.com/shareArticle?mini=true&url=${url}&title=${text}`;
+            break;
+          case 'whatsapp':
+            href = `https://wa.me/?text=${text}%20${url}`;
+            break;
+          case 'mail':
+            href = `mailto:?subject=%22${text}%22&body=${text}%20${url}`;
+            break;
+          default:
+            return;
+        }
+
+        const newlink = document.createElement('a');
+        newlink.target = '_blank';
+        newlink.href = href;
+        newlink.click();
+      });
+    }
 
     function appyHeaderStylesOnScroll() {
       const header = document.querySelector('#header[data-aw-sticky-header]');

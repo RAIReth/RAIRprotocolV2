@@ -1,6 +1,7 @@
 ---
 import { SITE } from '~/utils/config';
 import Logo from '~/components/Logo.astro';
+import Navigation from '~/components/Navigation.astro';
 
 interface Props {
   title?: string;
@@ -9,7 +10,7 @@ interface Props {
 const { title = SITE?.name || "My Site" } = Astro.props;
 ---
 
-<header class="fixed w-full top-0 z-50 bg-white/95 dark:bg-slate-900/95 border-b border-gray-200/80 dark:border-slate-800/80">
+<header id="header" class="fixed w-full top-0 z-50 bg-white/95 dark:bg-slate-900/95 border-b border-gray-200/80 dark:border-slate-800/80">
   <div class="max-w-7xl mx-auto px-4 sm:px-6">
     <div class="flex justify-between items-center h-16">
       <!-- Logo and Site Title -->
@@ -18,6 +19,11 @@ const { title = SITE?.name || "My Site" } = Astro.props;
           <Logo />
         </a>
       </div>
+
+      <!-- Navigation -->
+      <nav class="hidden md:flex">
+        <Navigation />
+      </nav>
 
       <!-- Theme Toggle and GitHub CTA -->
       <div class="flex items-center space-x-4">

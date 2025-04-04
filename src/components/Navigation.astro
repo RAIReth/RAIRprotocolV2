@@ -1,9 +1,46 @@
+---
+import { headerData } from '~/navigation';
+import type { Link, Action } from '~/types/navigation';
+
+interface Props {
+  links?: Link[];
+  actions?: Action[];
+}
+
+const { links = headerData.links, actions = headerData.actions } = Astro.props;
+---
+
 <div class="nav-links">
-  <a href="/" class="nav-link">Home</a>
-  <a href="/about" class="nav-link">About</a>
-  <a href="/video" class="nav-link">Video</a>
-  <a href="/blog" class="nav-link">Blog</a>
-  <a href="/contact" class="nav-link">Contact</a>
+  {links?.map((link) => (
+    <div class="relative group">
+      <a href={link.href} class="nav-link">
+        {link.text}
+      </a>
+      {link.links && (
+        <div class="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-slate-800 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+          <div class="py-1">
+            {link.links.map((subLink) => (
+              <a
+                href={subLink.href}
+                class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                {subLink.text}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  ))}
+  {actions?.map((action) => (
+    <a
+      href={action.href}
+      target={action.target}
+      class="nav-link"
+    >
+      {action.text}
+    </a>
+  ))}
 </div>
 
 <style>

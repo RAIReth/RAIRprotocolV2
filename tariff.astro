@@ -1,0 +1,148 @@
+# Tariff - Global Trade Simulation Game
+
+## Overview
+Tariff is an interactive 3D visualization game that simulates global trade dynamics using Three.js. Players can observe and manipulate trade parameters to achieve global economic equilibrium through tariff adjustments.
+
+## Core Game Mechanics
+
+### Visual Representation
+- 3D globe using Three.js with country borders highlighted
+- Dynamic trade routes visualized as flowing lines between countries
+- Color-coded indicators for:
+  - Trade surplus (green)
+  - Trade deficit (red)
+  - Balanced trade (blue)
+- Real-time GDP growth/decline visualization through country size/glow effects
+
+### Simulation Parameters
+1. **Tariff Rates**
+   - Range: 0% to 100%
+   - Affects import/export volumes
+   - Visual impact on trade route thickness
+
+2. **GDP Indicators**
+   - Per country GDP growth/decline
+   - Visual representation through country size/glow
+   - Historical GDP trends graph
+
+3. **Trade Metrics**
+   - Import volumes
+   - Export volumes
+   - Trade balance
+   - Bilateral trade relationships
+
+4. **Additional Parameters**
+   - Currency exchange rates
+   - Population growth
+   - Industrial production index
+   - Consumer confidence index
+
+### Game Controls
+- Play/Pause button
+- Reset button
+- Speed control (0.5x to 2x)
+- Parameter adjustment sliders
+- Country selection for detailed view
+
+### Game Flow
+1. **Initialization (5 seconds)**
+   - Load world map
+   - Initialize trade routes
+   - Set initial parameters
+
+2. **Main Simulation (45 seconds)**
+   - Real-time parameter updates
+   - Dynamic trade route visualization
+   - Economic indicator updates
+
+3. **End Game (10 seconds)**
+   - Victory screen when all trade balances are equal
+   - Final statistics display
+   - Option to restart
+
+## Technical Requirements
+
+### Frontend
+- Three.js for 3D visualization
+- React for UI components
+- D3.js for data visualization
+- WebGL for performance optimization
+
+### Data Structure
+```typescript
+interface Country {
+  id: string;
+  name: string;
+  gdp: number;
+  population: number;
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
+  tradePartners: TradePartner[];
+}
+
+interface TradePartner {
+  countryId: string;
+  importVolume: number;
+  exportVolume: number;
+  tariffRate: number;
+}
+
+interface GameState {
+  isRunning: boolean;
+  currentTime: number;
+  countries: Country[];
+  globalParameters: GlobalParameters;
+}
+
+interface GlobalParameters {
+  baseTariffRate: number;
+  gdpGrowthRate: number;
+  tradeMultiplier: number;
+}
+```
+
+### Performance Targets
+- 60 FPS minimum
+- Less than 100ms initial load time
+- Less than 16ms per frame update time
+
+## Victory Conditions
+- All countries achieve trade balance within 1% margin
+- No country experiences > 5% GDP decline
+- Global trade volume remains stable
+
+## Future Enhancements
+1. Multiplayer mode
+2. Historical scenarios
+3. Custom country groupings
+4. Advanced economic models
+5. Achievement system
+
+## Development Phases
+1. **Phase 1: Core Mechanics**
+   - Basic 3D globe
+   - Trade route visualization
+   - Basic parameter controls
+
+2. **Phase 2: Economic Model**
+   - GDP calculations
+   - Trade balance algorithms
+   - Parameter impact simulation
+
+3. **Phase 3: UI/UX**
+   - Control panel
+   - Statistics dashboard
+   - Victory conditions
+
+4. **Phase 4: Polish**
+   - Visual effects
+   - Performance optimization
+   - Bug fixes
+
+## Success Metrics
+- Player engagement time
+- Number of successful equilibria achieved
+- User feedback on simulation accuracy
+- Performance benchmarks met 
